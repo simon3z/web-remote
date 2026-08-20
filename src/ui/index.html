@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0b0b0f">
+<title>Web Remote</title>
+<style>
+  :root {
+    --bg: #0b0b0f;
+    --key: #1a1a1f;
+    --key-border: #2a2a30;
+    --text: #e6e6e6;
+    --text-dim: #8a8a8a;
+    --accent: #ffb347;
+    --error: #e05252;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh; /* dynamic viewport: shrinks when mobile browser chrome appears */
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .hint {
+    background: #16161c;
+    color: var(--text-dim);
+    text-align: center;
+    padding: 4px 8px;
+    font-size: 12px;
+    transition: opacity .3s, height .3s, padding .3s;
+    flex-shrink: 0;
+  }
+  .hint.hidden { opacity: 0; height: 0; padding: 0; overflow: hidden; }
+
+  /* Single flat 5×3 grid. Every button is one cell, so all are equal size.
+     Row 1: transport   Row 2: volume   Rows 3–5: arrow cross */
+  .grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(5, 1fr);
+    gap: 8px;
+    padding: 8px;
+    max-width: 420px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  /* Arrow cross placement (rows 3–5). */
+  .grid .up    { grid-column: 2; grid-row: 3; }
+  .grid .left  { grid-column: 1; grid-row: 4; }
+  .grid .play  { grid-column: 2; grid-row: 4; }
+  .grid .right { grid-column: 3; grid-row: 4; }
+  .grid .down  { grid-column: 2; grid-row: 5; }
+
+  button.key {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0; /* allow the grid to shrink us */
+    background: var(--key);
+    border: 1px solid var(--key-border);
+    border-radius: 24px;
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: pointer;
+    overflow: hidden;
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  }
+  button.key svg { width: 40%; height: 40%; max-width: 36px; max-height: 36px; }
+  button.key .cap {
+    font-size: 10px;
+    letter-spacing: .04em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+  button.key:active {
+    transform: scale(0.96);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 0 18px var(--accent);
+  }
+  button.key.holding {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 0 18px var(--accent);
+  }
+  button.key.error {
+    border-color: var(--error);
+    box-shadow: 0 0 0 1px var(--error), 0 0 14px var(--error);
+  }
+  /* Volume hold-fill: a bar grows from the bottom as you hold. */
+  button.key .fill {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 0%;
+    background: var(--accent);
+    opacity: .25;
+    transition: height .05s linear;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <div id="hint" class="hint">Web Remote — press a key to send it to your computer</div>
+
+  <div class="grid">
+    <!-- Row 1: transport -->
+    <button class="key" data-key="prev" data-icon="prev" aria-label="Previous">
+      <div class="fill"></div>
+    </button>
+    <button class="key" data-key="next" data-icon="next" aria-label="Next">
+      <div class="fill"></div>
+    </button>
+    <button class="key" data-key="fullscreen" data-icon="fullscreen" aria-label="Fullscreen (F11)">
+      <div class="fill"></div>
+    </button>
+
+    <!-- Row 2: volume -->
+    <button class="key" data-key="voldn" data-icon="voldn" aria-label="Volume down">
+      <div class="fill"></div>
+    </button>
+    <button class="key" data-key="mute" data-icon="mute" aria-label="Mute">
+      <div class="fill"></div>
+    </button>
+    <button class="key" data-key="volup" data-icon="volup" aria-label="Volume up">
+      <div class="fill"></div>
+    </button>
+
+    <!-- Rows 3-5: arrow cross (play/pause in center) -->
+    <button class="key up" data-key="up" data-icon="up" aria-label="Up arrow">
+      <div class="fill"></div>
+    </button>
+    <button class="key left" data-key="left" data-icon="left" aria-label="Left arrow">
+      <div class="fill"></div>
+    </button>
+    <button class="key play" data-key="play" data-icon="play" aria-label="Play or pause">
+      <div class="fill"></div>
+    </button>
+    <button class="key right" data-key="right" data-icon="right" aria-label="Right arrow">
+      <div class="fill"></div>
+    </button>
+    <button class="key down" data-key="down" data-icon="down" aria-label="Down arrow">
+      <div class="fill"></div>
+    </button>
+  </div>
+
+<script>
+  // Inline SVG icons (12x12, currentColor). No external assets (R19).
+  const ICONS = {
+    play:  '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M4 2 L10 6 L4 10 Z"/></svg>',
+    pause: '<svg viewBox="0 0 12 12" fill="currentColor"><rect x="3" y="2" width="2.2" height="8"/><rect x="6.8" y="2" width="2.2" height="8"/></svg>',
+    next:  '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M2 2 L7 6 L2 10 Z"/><rect x="8" y="2" width="1.6" height="8"/></svg>',
+    prev:  '<svg viewBox="0 0 12 12" fill="currentColor"><rect x="2.4" y="2" width="1.6" height="8"/><path d="M10 2 L5 6 L10 10 Z"/></svg>',
+    volup: '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M2 4 L4 4 L7 2 L7 10 L4 8 L2 8 Z"/><path d="M9 3 L9 9" stroke="currentColor" stroke-width="1" fill="none" stroke-linecap="round"/></svg>',
+    voldn: '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M2 4 L4 4 L7 2 L7 10 L4 8 L2 8 Z"/></svg>',
+    mute:  '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M2 4 L4 4 L7 2 L7 10 L4 8 L2 8 Z"/><path d="M9 4 L11 8 M11 4 L9 8" stroke="currentColor" stroke-width="1" fill="none"/></svg>',
+    fullscreen: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 4 V2 H4 M8 2 H10 V4 M10 8 V10 H8 M4 10 H2 V8"/></svg>',
+    up:    '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 3 L10.5 8 H1.5 Z"/></svg>',
+    down:  '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 9 L1.5 4 H10.5 Z"/></svg>',
+    left:  '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M3 6 L8 1.5 V10.5 Z"/></svg>',
+    right: '<svg viewBox="0 0 12 12" fill="currentColor"><path d="M9 6 L4 1.5 V10.5 Z"/></svg>'
+  };
+
+  // The eleven emittable UI keys and which are repeatable (volume ramps).
+  const KEYS = {
+    prev:       { repeat: false },
+    play:       { repeat: false },
+    next:       { repeat: false },
+    fullscreen: { repeat: false },
+    voldn:      { repeat: true },
+    mute:       { repeat: false },
+    volup:      { repeat: true },
+    up:         { repeat: false },
+    down:       { repeat: false },
+    left:       { repeat: false },
+    right:      { repeat: false }
+  };
+  const STOP_HOLD_MS = 600;      // R21: long-press on play → stop
+  const MAX_HOLD_MS = 5000;      // R15 cap
+
+  // The page is served at /p/<token>; the API is /p/<token>/key. Derive the
+  // base from the current URL so we never hard-code the secret (R15, R13).
+  const base = (() => {
+    const m = location.pathname.match(/\/p\/[^/]+/);
+    return m ? m[0] : "/p";
+  })();
+
+  const hint = document.getElementById("hint");
+  function dismissHint() {
+    hint.classList.add("hidden");
+    try { sessionStorage.setItem("hint", "1"); } catch (e) {}
+  }
+  function showHint(msg) {
+    hint.textContent = msg || "Web Remote — press a key to send it to your computer";
+    hint.classList.remove("hidden");
+  }
+  try {
+    if (sessionStorage.getItem("hint") === "1") dismissHint();
+  } catch (e) {}
+
+  // Wire icons + captions. The <button> already contains a persistent .fill
+  // (the hold-fill bar); we append the icon + caption around it, never
+  // wiping the fill.
+  for (const btn of document.querySelectorAll("button.key")) {
+    const icon = btn.dataset.icon;
+    const fill = btn.querySelector(".fill");
+    const cap = document.createElement("span");
+    cap.className = "cap";
+    cap.textContent = icon;
+    btn.insertAdjacentHTML("afterbegin", ICONS[icon] || "");
+    btn.appendChild(cap);
+    btn.appendChild(fill); // keep fill last (z-order: icon/caption above fill)
+  }
+
+  function postKey(key, holdMs) {
+    // One request per press (R22, R25). `key` is the wire key; the play/pause
+    // double-duty (tap → play, hold → stop) is decided by the caller.
+    return fetch(base + "/key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, hold_ms: holdMs }),
+    }).then(r => {
+      if (r.ok) dismissHint();
+      else return Promise.reject(r.status);
+    });
+  }
+
+  function haptic() {
+    if (navigator.vibrate) navigator.vibrate(10);
+  }
+
+  function startPress(btn, key, isVolume, isPlay) {
+    btn.classList.add("holding");
+    haptic();
+    const fill = btn.querySelector(".fill");
+    const startT = performance.now();
+    let timer = null;
+
+    if (isVolume) {
+      // Grow the fill while holding (R23). The hold is sent at release.
+      timer = setInterval(() => {
+        const ms = Math.min(performance.now() - startT, 1500);
+        fill.style.height = (ms / 1500 * 100) + "%";
+      }, 50);
+    }
+
+    function end() {
+      if (btn._done) return;
+      btn._done = true;
+      if (timer) clearInterval(timer);
+      const held = Math.min(performance.now() - startT, MAX_HOLD_MS);
+      btn.classList.remove("holding");
+      if (fill) fill.style.height = "0%";
+
+      let wireKey = key;
+      let holdMs = 0;
+      if (isPlay) {
+        wireKey = held > STOP_HOLD_MS ? "stop" : "play";
+      } else {
+        holdMs = KEYS[key] && KEYS[key].repeat ? Math.round(held) : 0;
+      }
+      postKey(wireKey, holdMs).catch(() => {
+        showHint("Couldn't reach the host — is it running?");
+        btn.classList.add("error");
+        setTimeout(() => btn.classList.remove("error"), 500);
+      });
+    }
+
+    const up = () => { btn.removeEventListener("touchend", up); btn.removeEventListener("mouseup", up); end(); };
+    btn.addEventListener("touchend", up);
+    btn.addEventListener("mouseup", up);
+    btn.addEventListener("touchcancel", up);
+    return end;
+  }
+
+  function pressDown(btn) {
+    const key = btn.dataset.key;
+    const meta = KEYS[key];
+    if (!meta) return;
+    btn._done = false;
+    startPress(btn, key, meta.repeat, key === "play");
+  }
+
+  for (const btn of document.querySelectorAll("button.key")) {
+    btn.addEventListener("touchstart", (e) => { e.preventDefault(); pressDown(btn); });
+    btn.addEventListener("mousedown", (e) => { e.preventDefault(); pressDown(btn); });
+    btn.addEventListener("touchmove", (e) => e.preventDefault());
+  }
+</script>
+</body>
+</html>
