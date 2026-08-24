@@ -5,12 +5,13 @@
 //! cookie, no session, no rotation.
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use rand::RngCore;
+use rand::{rngs::StdRng, Rng};
 
 /// Generate a fresh token: 32 random bytes, URL-safe base64 (no padding).
 pub fn generate_token() -> String {
     let mut buf = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut buf);
+    let mut rng: StdRng = rand::make_rng();
+    rng.fill_bytes(&mut buf);
     URL_SAFE_NO_PAD.encode(buf)
 }
 
