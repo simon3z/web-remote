@@ -33,9 +33,5 @@ for b in buttons:
 print("UI HTML structure OK")
 PY
 
-# Cognitive complexity threshold (arborist).
-# Most complex function: qr_to_ansi_text = 9. Threshold 20 leaves generous
-# headroom while still catching a function that grows into a tangle.
-arborist src/ --threshold 20 --exceeds-only
 
 echo "✓ All checks passed."

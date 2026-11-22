@@ -50,40 +50,12 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // enigo logs through `log` (via the `tracing-log` bridge, which is in
-    // the dep tree via tracing-subscriber). The WARN it emits when the
-    // Wayland virtual-keyboard protocol is unavailable is expected on some
-    // GNOME sessions — the x11rb fallback handles that case, so we silence
-    // enigo's platform module by default. `RUST_LOG=enigo=debug` overrides.
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,enigo=error")),
-        )
-        .init();
-
+    init_logging();
     let args = Args::parse();
-    let token = auth::generate_token();
-    let scheme = if args.http { "http" } else { "https" };
-    let host_ip = args
-        .host
-        .clone()
-        .unwrap_or_else(|| host::detect_host_ip().to_string());
-    let bind: SocketAddr = host::bind_addr(&args.bind, args.port);
 
     // Build the sink. For evdev this happens while root (under sudo); the
     // privilege drop happens right after, keyed on the chosen name.
-    let sink: Box<dyn Sink> = match args.input.as_str() {
-        #[cfg(feature = "wayland-sink")]
-        "wayland" => Box::new(WaylandSink::new()?) as Box<dyn Sink>,
-        "null" => Box::new(NullSink::new()?) as Box<dyn Sink>,
-        #[cfg(feature = "evdev-sink")]
-        "evdev" => Box::new(EvdevSink::new()?) as Box<dyn Sink>,
-        other => {
-            eprintln!("unknown --input {other:?}; use `wayland` or `evdev`");
-            std::process::exit(2);
-        }
-    };
+    let sink: Box<dyn Sink> = build_sink(&args.input)?;
 
     // Evdev: drop privileges now that the uinput device is registered (R7,
     // R8), before any socket is bound.
@@ -96,15 +68,57 @@ async fn main() -> anyhow::Result<()> {
 
     let sink = Arc::new(tokio::sync::Mutex::new(sink));
 
+    let token = auth::generate_token();
+    let scheme = if args.http { "http" } else { "https" };
+    let host_ip = args
+        .host
+        .clone()
+        .unwrap_or_else(|| host::detect_host_ip().to_string());
+    let bind: SocketAddr = host::bind_addr(&args.bind, args.port);
+
     let url = auth::secret_url(scheme, &host_ip, args.port, &token);
-    println!("web-remote: {url}");
-    println!("(scan the QR, or open the URL above; this token is valid until the process exits)");
-    println!("{}", web_remote::qrgen::qr_to_ansi_text(&url));
-    println!();
+    print_startup(&url);
 
     let state = server::AppState { token, sink };
     server::serve(Arc::new(state), bind, scheme)
         .await
         .map_err(|e| anyhow::anyhow!("serve: {e}"))?;
     Ok(())
+}
+
+/// Init tracing. enigo logs through `log` (via the `tracing-log` bridge in
+/// the dep tree via tracing-subscriber). The WARN it emits when the Wayland
+/// virtual-keyboard protocol is unavailable is expected on some GNOME
+/// sessions — the x11rb fallback handles that case, so we silence enigo's
+/// platform module by default. `RUST_LOG=enigo=debug` overrides.
+fn init_logging() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,enigo=error")),
+        )
+        .init();
+}
+
+/// Build the input sink; unknown `--input` values are fatal (exit 2).
+fn build_sink(input: &str) -> anyhow::Result<Box<dyn Sink>> {
+    Ok(match input {
+        #[cfg(feature = "wayland-sink")]
+        "wayland" => Box::new(WaylandSink::new()?) as Box<dyn Sink>,
+        "null" => Box::new(NullSink::new()?) as Box<dyn Sink>,
+        #[cfg(feature = "evdev-sink")]
+        "evdev" => Box::new(EvdevSink::new()?) as Box<dyn Sink>,
+        other => {
+            eprintln!("unknown --input {other:?}; use `wayland` or `evdev`");
+            std::process::exit(2);
+        }
+    })
+}
+
+/// Print the secret URL, the token-lifetime note, and the terminal QR.
+fn print_startup(url: &str) {
+    println!("web-remote: {url}");
+    println!("(scan the QR, or open the URL above; this token is valid until the process exits)");
+    println!("{}", web_remote::qrgen::qr_to_ansi_text(url));
+    println!();
 }

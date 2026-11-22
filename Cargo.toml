@@ -50,5 +50,10 @@ evdev-sink = ["dep:evdev", "dep:nix"]
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 
+[lints.clippy]
+cognitive_complexity = "warn"
+too_many_lines = "warn"
+too_many_arguments = "warn"
+
 [profile.release]
 strip = true

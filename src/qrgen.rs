@@ -19,49 +19,50 @@ pub fn qr_to_ansi_text(content: &str) -> String {
 
     // Pad to an even width so half-block pairs always align.
     let w_pad = if w.is_multiple_of(2) { w } else { w + 1 };
-    // Total lines: (w_pad / 2) data lines + 2 border lines (top/bottom).
-    // Each line is 2 chars per half-block pair, so width = w_pad + 4.
+    // Each line is 2 chars per half-block pair plus the 2-space border on
+    // each side, so width = w_pad + 4.
     let line_width = w_pad + 4;
 
     let mut out = String::new();
 
     // Top border.
-    for _ in 0..line_width {
-        out.push(' ');
-    }
-    out.push('\n');
+    out.push_str(&border_line(line_width));
 
     // Data rows: two QR rows per line.
     for y_pair in (0..w_pad).step_by(2) {
         out.push_str("  "); // left border (2 spaces)
         for x in 0..w_pad {
-            let top_dark = if y_pair < w && x < w {
-                matches!(colors[y_pair * w + x], qrcode::types::Color::Dark)
-            } else {
-                false
-            };
-            let bot_dark = if y_pair + 1 < w && x < w {
-                matches!(colors[(y_pair + 1) * w + x], qrcode::types::Color::Dark)
-            } else {
-                false
-            };
-            out.push(match (top_dark, bot_dark) {
-                (true, true) => '\u{2588}',  // █ both dark
-                (true, false) => '\u{2580}', // ▀ top dark
-                (false, true) => '\u{2584}', // ▄ bottom dark
-                (false, false) => ' ',       // both light
-            });
+            let top_dark = is_dark(&colors, y_pair, x, w);
+            let bot_dark = is_dark(&colors, y_pair + 1, x, w);
+            out.push(pair_glyph(top_dark, bot_dark));
         }
         out.push_str("  "); // right border
         out.push('\n');
     }
 
     // Bottom border.
-    for _ in 0..line_width {
-        out.push(' ');
-    }
-    out.push('\n');
+    out.push_str(&border_line(line_width));
     out
+}
+
+/// A blank line spanning the full QR width (top/bottom border).
+fn border_line(line_width: usize) -> String {
+    " ".repeat(line_width) + "\n"
+}
+
+/// Read module (y, x), treating out-of-bounds coordinates as light.
+fn is_dark(colors: &[qrcode::types::Color], y: usize, x: usize, w: usize) -> bool {
+    y < w && x < w && colors[y * w + x] == qrcode::types::Color::Dark
+}
+
+/// Pick the half-block character for a pair of QR rows (one terminal cell).
+fn pair_glyph(top_dark: bool, bot_dark: bool) -> char {
+    match (top_dark, bot_dark) {
+        (true, true) => '\u{2588}',  // █ both dark
+        (true, false) => '\u{2580}', // ▀ top dark
+        (false, true) => '\u{2584}', // ▄ bottom dark
+        (false, false) => ' ',       // both light
+    }
 }
 
 #[cfg(test)]
