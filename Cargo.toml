@@ -5,7 +5,6 @@ edition = "2021"
 description = "Serve a secure, token-guarded web UI to send multimedia keys (play/stop/volume) to the local Linux (GNOME/Wayland) host."
 license = "Apache-2.0"
 documentation = "https://docs.rs/web-remote"
-homepage = "https://github.com/simon3z/web-remote"
 repository = "https://github.com/simon3z/web-remote"
 readme = "README.md"
 
