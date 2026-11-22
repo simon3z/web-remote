@@ -143,6 +143,48 @@ mod tests {
         }
     }
 
+    /// Structural invariants: the gate ci.sh used to run via python/lxml.
+    /// The page is a single hand-written file, so we assert structure
+    /// directly instead of pulling in an HTML parser for six invariants.
+    #[test]
+    fn ui_structure_is_stable() {
+        ui_shell_is_stable(PAGE);
+        ui_button_counts_are_stable(PAGE);
+    }
+
+    /// Document shell and the key containers must be present.
+    fn ui_shell_is_stable(page: &str) {
+        assert!(page.starts_with("<!doctype html>"), "missing doctype");
+        assert!(page.contains("<html"), "missing <html> root");
+        assert!(page.contains("<body"), "missing <body>");
+        assert!(page.contains("class=\"grid\""), "missing .grid container");
+        assert!(page.contains("id=\"hint\""), "missing #hint");
+    }
+
+    /// Exactly one button per emittable key; every button carries the three
+    /// required attributes. (A duplicate data-key would slip past the
+    /// set-equality test, so we also assert the exact count.)
+    /// (`<button ` with the space: the closing tag and the JS comment
+    /// `The <button> already...` must not count.)
+    fn ui_button_counts_are_stable(page: &str) {
+        assert_eq!(page.matches("<button ").count(), 11, "expected 11 buttons");
+        assert_eq!(
+            page.matches("data-key=\"").count(),
+            11,
+            "every button must carry data-key"
+        );
+        assert_eq!(
+            page.matches("data-icon=\"").count(),
+            11,
+            "every button must carry data-icon"
+        );
+        assert_eq!(
+            page.matches("aria-label=\"").count(),
+            11,
+            "every button must carry aria-label"
+        );
+    }
+
     /// R21: stop is reachable (long-press on play) but is NOT a standalone
     /// button — the UI has no `data-key="stop"`.
     #[test]
